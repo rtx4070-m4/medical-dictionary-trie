@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MedTrie — Medical Dictionary</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+  :root {
+    --bg:        #0a0d14;
+    --surface:   #111520;
+    --border:    #1e2535;
+    --accent:    #00c2b3;
+    --accent2:   #6c63ff;
+    --text:      #e8edf7;
+    --muted:     #5a6278;
+    --danger:    #ff5f6d;
+    --success:   #00c2b3;
+    --mono:      'DM Mono', monospace;
+    --serif:     'DM Serif Display', serif;
+    --sans:      'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID BACKGROUND ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,194,179,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,194,179,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.18;
+  }
+  .orb-1 { width: 500px; height: 500px; background: var(--accent);  top: -150px; left: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: var(--accent2); bottom: -100px; right: -80px; }
+
+  /* ── LAYOUT ── */
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 60px 0 48px;
+    text-align: center;
+    animation: fadeDown .6s ease both;
+  }
+
+  .logo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: rgba(0,194,179,.1);
+    border: 1px solid rgba(0,194,179,.2);
+    border-radius: 99px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+  }
+  .logo-pill span { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -.01em;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+
+  .subtitle {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 300;
+    line-height: 1.6;
+  }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 32px;
+    flex-wrap: wrap;
+    animation: fadeDown .6s .15s ease both;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 1.25rem;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+  }
+  .stat-sep { width: 1px; background: var(--border); height: 36px; align-self: center; }
+
+  /* ── SEARCH CARD ── */
+  .search-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-top: 40px;
+    animation: fadeUp .6s .2s ease both;
+    position: relative;
+    overflow: visible;
+  }
+  .search-card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 20%; right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,.03);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+  }
+  .tab {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 7px;
+    transition: all .2s;
+    letter-spacing: .02em;
+  }
+  .tab.active {
+    background: var(--accent);
+    color: #000;
+  }
+  .tab:not(.active):hover { color: var(--text); }
+
+  /* ── INPUT ── */
+  .input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .input-icon {
+    position: absolute;
+    left: 16px;
+    color: var(--muted);
+    font-size: 1rem;
+    pointer-events: none;
+    transition: color .2s;
+  }
+  #search-input {
+    width: 100%;
+    padding: 16px 52px 16px 44px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    caret-color: var(--accent);
+  }
+  #search-input::placeholder { color: var(--muted); font-family: var(--sans); }
+  #search-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,194,179,.12);
+  }
+  #search-input:focus ~ .input-icon { color: var(--accent); }
+
+  .clear-btn {
+    position: absolute;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: .9rem;
+    padding: 4px;
+    border-radius: 50%;
+    transition: color .2s;
+    display: none;
+    line-height: 1;
+  }
+  .clear-btn:hover { color: var(--text); }
+
+  /* ── OPTIONS ROW ── */
+  .options-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .option-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .8rem;
+    color: var(--muted);
+  }
+  .option-group label { white-space: nowrap; }
+  select, input[type="number"] {
+    background: rgba(255,255,255,.05);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: .78rem;
+    padding: 5px 8px;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus, input[type="number"]:focus { border-color: var(--accent); }
+  input[type="number"] { width: 62px; }
+
+  /* ── TIMING CHIP ── */
+  .timing {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--muted);
+    background: rgba(255,255,255,.04);
+    padding: 3px 9px;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    transition: opacity .3s;
+    white-space: nowrap;
+  }
+  .timing.active { color: var(--accent); border-color: rgba(0,194,179,.3); }
+
+  /* ── RESULTS ── */
+  .results-wrap {
+    margin-top: 20px;
+    min-height: 60px;
+  }
+
+  .result-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, transform .1s;
+    animation: slideIn .2s ease both;
+  }
+  .result-item:hover {
+    background: rgba(0,194,179,.07);
+    border-color: rgba(0,194,179,.25);
+    transform: translateX(3px);
+  }
+  .result-item:nth-child(1)  { animation-delay: .00s }
+  .result-item:nth-child(2)  { animation-delay: .03s }
+  .result-item:nth-child(3)  { animation-delay: .06s }
+  .result-item:nth-child(4)  { animation-delay: .09s }
+  .result-item:nth-child(5)  { animation-delay: .12s }
+  .result-item:nth-child(6)  { animation-delay: .15s }
+  .result-item:nth-child(7)  { animation-delay: .18s }
+  .result-item:nth-child(8)  { animation-delay: .21s }
+  .result-item:nth-child(9)  { animation-delay: .24s }
+  .result-item:nth-child(10) { animation-delay: .27s }
+
+  .result-term {
+    font-family: var(--sans);
+    font-size: .9rem;
+    font-weight: 400;
+    line-height: 1.3;
+  }
+  .result-term mark {
+    background: transparent;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .result-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: .68rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    letter-spacing: .04em;
+  }
+  .badge-dist-0 { background: rgba(0,194,179,.12); color: var(--accent); border: 1px solid rgba(0,194,179,.2); }
+  .badge-dist-1 { background: rgba(255,199,0,.1);  color: #ffc700; border: 1px solid rgba(255,199,0,.2); }
+  .badge-dist-2 { background: rgba(255,95,109,.1); color: var(--danger); border: 1px solid rgba(255,95,109,.2); }
+  .badge-freq   { background: rgba(108,99,255,.12); color: #8f88ff; border: 1px solid rgba(108,99,255,.2); }
+  .badge-rank   { background: rgba(255,255,255,.05); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── EMPTY / ERROR STATES ── */
+  .state-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 0;
+    gap: 10px;
+    color: var(--muted);
+    font-size: .88rem;
+    animation: fadeIn .3s ease;
+  }
+  .state-icon { font-size: 1.8rem; opacity: .5; }
+
+  /* ── EXACT MATCH BANNER ── */
+  .match-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: rgba(0,194,179,.07);
+    border: 1px solid rgba(0,194,179,.22);
+    border-radius: 10px;
+    font-size: .85rem;
+    margin-bottom: 10px;
+    animation: fadeIn .25s ease;
+  }
+  .match-banner .icon { color: var(--accent); font-size: 1.1rem; }
+  .match-banner.not-found { background: rgba(255,95,109,.07); border-color: rgba(255,95,109,.22); }
+  .match-banner.not-found .icon { color: var(--danger); }
+
+  /* ── API CONFIG PANEL ── */
+  .config-panel {
+    background: rgba(255,255,255,.02);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 20px;
+    animation: fadeIn .3s ease;
+  }
+  .config-title {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .config-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #api-url {
+    flex: 1;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: .8rem;
+    padding: 8px 12px;
+    outline: none;
+  }
+  #api-url:focus { border-color: var(--accent); }
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: .82rem;
+    font-weight: 500;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(255,255,255,.1); }
+
+  .api-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .75rem;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .api-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .api-status.online .dot { background: var(--accent); animation: pulse 2s infinite; }
+  .api-status.offline .dot { background: var(--danger); }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: .78rem;
+    animation: fadeIn .6s .4s ease both;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .3; }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 500px) {
+    .search-card { padding: 20px; }
+    .options-row { gap: 8px; }
+    .timing { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="page">
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo-pill"><span></span> Trie-Powered Search</div>
+    <h1>Medical <em>Dictionary</em><br>& Drug Lookup</h1>
+    <p class="subtitle">
+      Instant prefix autocomplete and fuzzy search over 50,000+ medical terms,<br>
+      powered by an optimized Trie data structure — O(L) lookup time.
+    </p>
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat">
+        <span class="stat-value" id="stat-terms">—</span>
+        <span class="stat-label">Terms Loaded</span>
+      </div>
+      <div class="stat-sep"></div>
+      <div class="stat">
+        <span class="stat-value" id="stat-nodes">—</span>
+        <span class="stat-label">Trie Nodes</span>
+      </div>
+      <div class="stat-sep"></div>
+      <div class="stat">
+        <span class="stat-value" id="stat-mem">—</span>
+        <span class="stat-label">Memory (KB)</span>
+      </div>
+      <div class="stat-sep"></div>
+      <div class="stat">
+        <span class="stat-value">O(L)</span>
+        <span class="stat-label">Search Time</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── SEARCH CARD ── -->
+  <div class="search-card">
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-mode="autocomplete">🔍 Autocomplete</button>
+      <button class="tab" data-mode="fuzzy">✨ Fuzzy Search</button>
+      <button class="tab" data-mode="search">🎯 Exact Match</button>
+    </div>
+
+    <!-- Input -->
+    <div class="input-wrap">
+      <span class="input-icon">⌕</span>
+      <input
+        id="search-input"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Type a medical term or prefix..."
+      />
+      <button class="clear-btn" id="clear-btn" title="Clear">✕</button>
+    </div>
+
+    <!-- Options Row -->
+    <div class="options-row">
+      <div class="option-group">
+        <label for="sort-select">Sort by</label>
+        <select id="sort-select">
+          <option value="frequency">Frequency</option>
+          <option value="alphabetical">Alphabetical</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <label for="topk-input">Top</label>
+        <input type="number" id="topk-input" value="10" min="1" max="50" />
+        <label>results</label>
+      </div>
+      <div class="option-group fuzzy-only" style="display:none">
+        <label for="dist-input">Max dist</label>
+        <input type="number" id="dist-input" value="2" min="0" max="5" />
+      </div>
+      <div class="timing" id="timing-chip">—</div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-wrap" id="results-wrap">
+      <div class="state-msg" id="empty-state">
+        <span class="state-icon">⚕</span>
+        <span>Start typing to search medical terms</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── API CONFIG ── -->
+  <div class="config-panel">
+    <div class="config-title">
+      ⚙ API Connection
+      <span class="api-status" id="api-status">
+        <span class="dot"></span> Checking...
+      </span>
+    </div>
+    <div class="config-row">
+      <input id="api-url" type="text" value="http://localhost:8000" placeholder="http://localhost:8000" />
+      <button class="btn btn-primary" id="connect-btn">Connect</button>
+      <button class="btn btn-ghost" id="demo-btn" title="Use built-in demo data without API">Demo Mode</button>
+    </div>
+    <p style="margin-top:10px; font-size:.75rem; color:var(--muted);">
+      Run <code style="color:var(--accent)">uvicorn api.app:app --port 8000</code> then click Connect — or use Demo Mode for offline browsing.
+    </p>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <footer>
+    Built with ❤ · Trie data structure · FastAPI backend ·
+    <a href="https://github.com/yourusername/medical-dictionary-trie" target="_blank">View on GitHub</a>
+  </footer>
+
+</div><!-- /page -->
+
+<script>
+/* ================================================================
+   Medical Dictionary Trie — Frontend JS
+   Supports: live autocomplete, fuzzy search, exact match
+   API mode + offline demo mode with built-in fallback data
+================================================================ */
+
+// ── State ────────────────────────────────────────────────────────
+let apiBase      = 'http://localhost:8000';
+let currentMode  = 'autocomplete';
+let apiOnline    = false;
+let demoMode     = false;
+let debounceTimer = null;
+
+// ── Demo fallback data (subset of medical terms) ─────────────────
+const DEMO_TERMS = [
+  "abdominal aorta","abdominal pain","ablation","abscess","acne",
+  "acute bronchitis","acute pancreatitis","adenocarcinoma","adenoma",
+  "adrenal gland","adrenaline","alcoholic hepatitis","allergic rhinitis",
+  "alopecia","alzheimers disease","amenorrhea","anemia","aneurysm",
+  "angina pectoris","angioedema","angioplasty","anorexia nervosa",
+  "antibiotic resistance","antibody","anxiety disorder","aorta",
+  "aortic aneurysm","aortic stenosis","aplastic anemia","appendicitis",
+  "arrhythmia","arteriosclerosis","arthritis","asthma","astigmatism",
+  "atherosclerosis","atrial fibrillation","atrial flutter","atrophy",
+  "bacteremia","bell palsy","benign tumor","bipolar disorder",
+  "bladder cancer","blood clot","blood pressure","bone fracture",
+  "bone marrow","bowel obstruction","bradycardia","brain aneurysm",
+  "brain tumor","bronchitis","bursitis","cancer staging","carcinoma",
+  "cardiac arrest","cardiac output","cardiac tamponade","cardiomegaly",
+  "cardiomyopathy","cardiovascular disease","carotid artery",
+  "carpal tunnel syndrome","cataracts","celiac disease","cellulitis",
+  "cerebral edema","cerebral hemorrhage","cerebral palsy","chemotherapy",
+  "chest pain","chickenpox","cholecystitis","cholesterol",
+  "chronic bronchitis","chronic fatigue syndrome","chronic kidney disease",
+  "chronic obstructive pulmonary disease","cirrhosis","colon cancer",
+  "colorectal cancer","coma","congenital heart disease","conjunctivitis",
+  "coronary artery disease","crohns disease","cystic fibrosis",
+  "deep vein thrombosis","dehydration","delirium","dementia","depression",
+  "dermatitis","diabetes insipidus","diabetes mellitus",
+  "diabetic ketoacidosis","diabetic neuropathy","diabetic retinopathy",
+  "dialysis","diarrhea","disc herniation","diverticulitis","diverticulosis",
+  "dysphagia","dyspnea","ectopic pregnancy","edema","electrocardiogram",
+  "embolism","emphysema","encephalitis","endocarditis","endometriosis",
+  "epilepsy","esophageal cancer","esophagitis","essential hypertension",
+  "fatty liver disease","fibromyalgia","fracture","gallstone","gastritis",
+  "gastroesophageal reflux disease","gastrointestinal bleeding",
+  "gestational diabetes","glaucoma","glomerulonephritis","goiter",
+  "gonorrhea","gout","grave disease","heart failure","heart murmur",
+  "hemophilia","hemorrhage","hemorrhoids","hepatitis a","hepatitis b",
+  "hepatitis c","herpes simplex virus","herpes zoster","high blood pressure",
+  "hypercholesterolemia","hyperglycemia","hyperlipidemia","hypertension",
+  "hyperthyroidism","hypothyroidism","hypoxemia","hypoxia",
+  "inflammatory bowel disease","influenza","insomnia","iron deficiency anemia",
+  "irritable bowel syndrome","ischemic heart disease","jaundice",
+  "kidney stones","lactose intolerance","laryngitis","leukemia","lipoma",
+  "liver cancer","liver cirrhosis","liver failure","low back pain",
+  "lung cancer","lupus erythematosus","lyme disease","lymphoma",
+  "macular degeneration","malaria","melanoma","meningitis","metabolic syndrome",
+  "migraine headache","mitral valve prolapse","multiple sclerosis",
+  "myasthenia gravis","myocardial infarction","myocarditis","narcolepsy",
+  "nephrotic syndrome","neuropathy","non hodgkin lymphoma","obesity",
+  "obstructive sleep apnea","osteoporosis","otitis media","ovarian cancer",
+  "ovarian cyst","pancreatitis","panic disorder","parkinson disease",
+  "pericarditis","peripheral vascular disease","pharyngitis","pleural effusion",
+  "pneumonia","pneumothorax","polycystic kidney disease",
+  "polycystic ovary syndrome","portal hypertension","prostate cancer",
+  "psoriasis","pulmonary edema","pulmonary embolism","pulmonary fibrosis",
+  "pulmonary hypertension","pyelonephritis","renal failure","retinal detachment",
+  "rheumatoid arthritis","sarcoidosis","sciatica","sepsis","sickle cell anemia",
+  "sinusitis","sleep apnea","spinal cord injury","spinal stenosis","stroke",
+  "systemic lupus erythematosus","tachycardia","tendinitis","testicular cancer",
+  "thrombocytopenia","thrombosis","thyroid cancer","thyroiditis","tinnitus",
+  "tonsillitis","transient ischemic attack","tuberculosis","type 1 diabetes",
+  "type 2 diabetes","ulcerative colitis","urinary tract infection",
+  "uterine cancer","uterine fibroids","vasculitis","ventricular fibrillation",
+  "ventricular tachycardia","viral hepatitis","vitamin b12 deficiency",
+  "vitamin d deficiency","von willebrand disease","wilson disease"
+];
+
+// Build a simple prefix index for demo mode
+let prefixIndex = {};
+function buildPrefixIndex(terms) {
+  prefixIndex = {};
+  terms.forEach(t => {
+    for (let i = 1; i <= t.length; i++) {
+      const pfx = t.slice(0, i);
+      if (!prefixIndex[pfx]) prefixIndex[pfx] = [];
+      prefixIndex[pfx].push(t);
+    }
+  });
+}
+
+function demoAutocomplete(prefix, topK) {
+  const norm = prefix.trim().toLowerCase();
+  const matches = prefixIndex[norm] || [];
+  return matches.slice(0, topK).map(t => ({ term: t, distance: 0 }));
+}
+
+function demoSearch(term) {
+  const norm = term.trim().toLowerCase();
+  return DEMO_TERMS.includes(norm);
+}
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const la = a.length, lb = b.length;
+  const dp = Array.from({length: la+1}, (_, i) => [i]);
+  for (let j = 0; j <= lb; j++) dp[0][j] = j;
+  for (let i = 1; i <= la; i++)
+    for (let j = 1; j <= lb; j++)
+      dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[la][lb];
+}
+
+function demoFuzzy(query, topK, maxDist) {
+  const norm = query.trim().toLowerCase();
+  // First try prefix
+  const prefix = demoAutocomplete(norm, topK);
+  if (prefix.length) return prefix;
+  // Fallback: Levenshtein on first word
+  const word = norm.split(' ')[0];
+  return DEMO_TERMS
+    .map(t => ({ term: t, distance: levenshtein(word, t.split(' ')[0]) }))
+    .filter(r => r.distance <= maxDist)
+    .sort((a, b) => a.distance - b.distance || a.term.localeCompare(b.term))
+    .slice(0, topK);
+}
+
+// ── DOM refs ────────────────────────────────────────────────────
+const inputEl     = document.getElementById('search-input');
+const clearBtn    = document.getElementById('clear-btn');
+const resultsWrap = document.getElementById('results-wrap');
+const timingChip  = document.getElementById('timing-chip');
+const apiStatusEl = document.getElementById('api-status');
+const apiUrlInput = document.getElementById('api-url');
+const connectBtn  = document.getElementById('connect-btn');
+const demoBtn     = document.getElementById('demo-btn');
+const sortSelect  = document.getElementById('sort-select');
+const topkInput   = document.getElementById('topk-input');
+const distInput   = document.getElementById('dist-input');
+const tabs        = document.querySelectorAll('.tab');
+const fuzzyOnly   = document.querySelectorAll('.fuzzy-only');
+
+// ── Tab switching ────────────────────────────────────────────────
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentMode = tab.dataset.mode;
+    fuzzyOnly.forEach(el => el.style.display = currentMode === 'fuzzy' ? '' : 'none');
+    if (inputEl.value) triggerSearch();
+    else clearResults();
+  });
+});
+
+// ── Input events ─────────────────────────────────────────────────
+inputEl.addEventListener('input', () => {
+  clearBtn.style.display = inputEl.value ? '' : 'none';
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(triggerSearch, 180);
+});
+
+clearBtn.addEventListener('click', () => {
+  inputEl.value = '';
+  clearBtn.style.display = 'none';
+  clearResults();
+  inputEl.focus();
+});
+
+sortSelect.addEventListener('change', () => { if (inputEl.value) triggerSearch(); });
+topkInput.addEventListener('change', () => { if (inputEl.value) triggerSearch(); });
+distInput.addEventListener('change', () => { if (inputEl.value) triggerSearch(); });
+
+// ── Search dispatch ──────────────────────────────────────────────
+async function triggerSearch() {
+  const q = inputEl.value.trim();
+  if (!q) { clearResults(); return; }
+
+  const topK   = parseInt(topkInput.value) || 10;
+  const sortBy = sortSelect.value;
+  const maxDist = parseInt(distInput.value) ?? 2;
+
+  showLoading();
+  const t0 = performance.now();
+
+  try {
+    let results;
+    if (currentMode === 'autocomplete') {
+      results = await fetchAutocomplete(q, topK, sortBy);
+    } else if (currentMode === 'fuzzy') {
+      results = await fetchFuzzy(q, topK, maxDist);
+    } else {
+      results = await fetchSearch(q);
+    }
+    const elapsed = (performance.now() - t0).toFixed(2);
+    setTiming(elapsed);
+    renderResults(results, q);
+  } catch (err) {
+    renderError(err.message);
+  }
+}
+
+// ── API calls ────────────────────────────────────────────────────
+async function fetchAutocomplete(q, topK, sortBy) {
+  if (demoMode || !apiOnline) {
+    await sleep(20);
+    return demoAutocomplete(q.toLowerCase(), topK);
+  }
+  const r = await fetch(`${apiBase}/autocomplete?q=${encodeURIComponent(q)}&top_k=${topK}&sort_by=${sortBy}`);
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  const data = await r.json();
+  return (data.results || []).map(t => ({ term: t, distance: 0 }));
+}
+
+async function fetchFuzzy(q, topK, maxDist) {
+  if (demoMode || !apiOnline) {
+    await sleep(40);
+    return demoFuzzy(q.toLowerCase(), topK, maxDist);
+  }
+  const r = await fetch(`${apiBase}/fuzzy?q=${encodeURIComponent(q)}&top_k=${topK}&max_distance=${maxDist}`);
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  const data = await r.json();
+  return data.results || [];
+}
+
+async function fetchSearch(q) {
+  if (demoMode || !apiOnline) {
+    await sleep(10);
+    const found = demoSearch(q);
+    return [{ found, term: q.toLowerCase() }];
+  }
+  const r = await fetch(`${apiBase}/search?q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  const data = await r.json();
+  return [{ found: data.found, term: data.term }];
+}
+
+// ── Render ───────────────────────────────────────────────────────
+function renderResults(data, query) {
+  if (!data || data.length === 0) {
+    resultsWrap.innerHTML = `
+      <div class="state-msg">
+        <span class="state-icon">🔭</span>
+        <span>No results found for "<strong>${escHtml(query)}</strong>"</span>
+      </div>`;
+    return;
+  }
+
+  if (currentMode === 'search') {
+    const { found, term } = data[0];
+    resultsWrap.innerHTML = `
+      <div class="match-banner ${found ? '' : 'not-found'}">
+        <span class="icon">${found ? '✓' : '✗'}</span>
+        <span>
+          ${found
+            ? `<strong>${escHtml(term)}</strong> found in the dictionary`
+            : `<strong>${escHtml(query)}</strong> was <em>not</em> found — try autocomplete mode`}
+        </span>
+      </div>`;
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'result-list';
+
+  data.forEach((item, idx) => {
+    const termStr = item.term || '';
+    const dist    = item.distance ?? 0;
+    const li = document.createElement('li');
+    li.className = 'result-item';
+    li.addEventListener('click', () => {
+      inputEl.value = termStr;
+      triggerSearch();
+    });
+
+    const highlightedTerm = highlightPrefix(termStr, query);
+    const distBadge = currentMode === 'fuzzy'
+      ? `<span class="badge badge-dist-${Math.min(dist,2)}" title="edit distance">dist ${dist}</span>`
+      : '';
+    const rankBadge = `<span class="badge badge-rank">#${idx+1}</span>`;
+
+    li.innerHTML = `
+      <span class="result-term">${highlightedTerm}</span>
+      <span class="result-meta">${distBadge}${rankBadge}</span>`;
+    list.appendChild(li);
+  });
+
+  resultsWrap.innerHTML = '';
+  resultsWrap.appendChild(list);
+}
+
+function highlightPrefix(term, prefix) {
+  const normP = prefix.trim().toLowerCase();
+  const normT = term.toLowerCase();
+  if (normP && normT.startsWith(normP)) {
+    return `<mark>${escHtml(term.slice(0, normP.length))}</mark>${escHtml(term.slice(normP.length))}`;
+  }
+  return escHtml(term);
+}
+
+function showLoading() {
+  resultsWrap.innerHTML = `<div class="state-msg"><div class="spinner"></div><span>Searching…</span></div>`;
+}
+
+function clearResults() {
+  resultsWrap.innerHTML = `
+    <div class="state-msg" id="empty-state">
+      <span class="state-icon">⚕</span>
+      <span>Start typing to search medical terms</span>
+    </div>`;
+  timingChip.textContent = '—';
+  timingChip.classList.remove('active');
+}
+
+function renderError(msg) {
+  resultsWrap.innerHTML = `
+    <div class="state-msg">
+      <span class="state-icon">⚠</span>
+      <span style="color:var(--danger)">${escHtml(msg)}</span>
+    </div>`;
+}
+
+function setTiming(ms) {
+  timingChip.textContent = `${ms} ms`;
+  timingChip.classList.add('active');
+}
+
+// ── API / Demo connect ────────────────────────────────────────────
+connectBtn.addEventListener('click', () => checkApi(apiUrlInput.value.trim()));
+demoBtn.addEventListener('click', activateDemoMode);
+
+async function checkApi(base) {
+  apiBase = base;
+  demoMode = false;
+  setStatus('checking');
+  try {
+    const r = await fetch(`${base}/stats`, { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) throw new Error();
+    const s = await r.json();
+    apiOnline = true;
+    setStatus('online');
+    updateStats(s.total_terms, s.total_nodes, s.memory_estimate_kb);
+  } catch {
+    apiOnline = false;
+    setStatus('offline');
+  }
+}
+
+function activateDemoMode() {
+  demoMode = true;
+  apiOnline = false;
+  buildPrefixIndex(DEMO_TERMS);
+  setStatus('demo');
+  updateStats(DEMO_TERMS.length, '~' + Math.round(DEMO_TERMS.length * 8), '~180');
+  demoBtn.textContent = '✓ Demo Active';
+  demoBtn.style.color = 'var(--accent)';
+}
+
+function setStatus(state) {
+  const el = apiStatusEl;
+  el.className = 'api-status';
+  if (state === 'online') {
+    el.classList.add('online');
+    el.innerHTML = '<span class="dot"></span> API Online';
+  } else if (state === 'offline') {
+    el.classList.add('offline');
+    el.innerHTML = '<span class="dot"></span> API Offline';
+  } else if (state === 'demo') {
+    el.classList.add('online');
+    el.innerHTML = '<span class="dot"></span> Demo Mode';
+  } else {
+    el.innerHTML = '<span class="dot"></span> Checking…';
+  }
+}
+
+function updateStats(terms, nodes, mem) {
+  document.getElementById('stat-terms').textContent = fmt(terms);
+  document.getElementById('stat-nodes').textContent = fmt(nodes);
+  document.getElementById('stat-mem').textContent   = typeof mem === 'number' ? mem.toFixed(0) : mem;
+}
+
+// ── Utilities ────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmt(n) {
+  return typeof n === 'number' ? n.toLocaleString() : n;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Init ─────────────────────────────────────────────────────────
+(async () => {
+  await checkApi(apiBase);
+  if (!apiOnline) activateDemoMode();
+  inputEl.focus();
+})();
+</script>
+</body>
+</html>
